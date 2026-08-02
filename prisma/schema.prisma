@@ -1,0 +1,151 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id                 String   @id @default(uuid())
+  email              String   @unique
+  name               String?
+  image              String?
+  role               Role     @default(USER)
+  emailVerified      DateTime?
+  twoFactorEnabled   Boolean  @default(false)
+  twoFactorSecretEnc String?  // encrypted
+  createdAt          DateTime @default(now())
+  orders             Order[]
+  tickets            Ticket[]
+}
+
+model Product {
+  id           String     @id @default(uuid())
+  title        String
+  slug         String     @unique
+  description  Json       // i18n JSON: { en: "...", pt-br: "...", ... }
+  priceUsd     Int        // price in cents USD base
+  images       String[]
+  categories   Category[] @relation("ProductCategories", references: [id])
+  inventory    InventoryItem[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  stock        Int
+}
+
+model Category {
+  id        String    @id @default(uuid())
+  name      Json      // i18n names
+  icon      String?
+  parentId  String?
+  products  Product[] @relation("ProductCategories")
+}
+
+model InventoryItem {
+  id               String    @id @default(uuid())
+  productId        String
+  product          Product   @relation(fields: [productId], references: [id])
+  login            String
+  passwordEnc      String    // encrypted
+  emailAccountId   String?
+  emailAccount     EmailAccount? @relation(fields: [emailAccountId], references: [id])
+  meta             Json?
+  status           InventoryStatus @default(AVAILABLE)
+  createdAt        DateTime  @default(now())
+  soldAt           DateTime?
+  order            Order?
+}
+
+model EmailAccount {
+  id             String   @id @default(uuid())
+  address        String   @unique
+  passwordEnc    String
+  provider       String
+  used           Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  inventoryItems InventoryItem[]
+}
+
+model Order {
+  id              String    @id @default(uuid())
+  userId          String
+  user            User      @relation(fields: [userId], references: [id])
+  productId       String
+  product         Product   @relation(fields: [productId], references: [id])
+  inventoryItemId String?
+  inventoryItem   InventoryItem? @relation(fields: [inventoryItemId], references: [id])
+  price           Int       // cents in local currency
+  currency        String
+  exchangeRate    Float
+  status          OrderStatus @default(PENDING)
+  payment         Payment?
+  createdAt       DateTime  @default(now())
+  deliveredAt     DateTime?
+}
+
+model Payment {
+  id                String    @id @default(uuid())
+  orderId           String    @unique
+  order             Order     @relation(fields: [orderId], references: [id])
+  provider          String
+  providerPaymentId String
+  amount            Int
+  currency          String
+  status            PaymentStatus @default(PENDING)
+  confirmations     Int     @default(0)
+  expiresAt         DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model Ticket {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  orderId   String?
+  subject   String
+  status    TicketStatus @default(OPEN)
+  messages  Json
+  assignedTo String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+enum Role {
+  USER
+  STAFF
+  ADMIN
+}
+
+enum InventoryStatus {
+  AVAILABLE
+  LOCKED
+  SOLD
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  AWAITING_PAYMENT
+  PAID
+  DELIVERED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  CONFIRMED
+  FAILED
+  EXPIRED
+  REFUNDED
+}
+
+enum TicketStatus {
+  OPEN
+  PENDING
+  RESOLVED
+  CLOSED
+}
